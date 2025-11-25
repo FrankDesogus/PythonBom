@@ -36,18 +36,44 @@ BOM_LINE_MODEL = "x_bom_line"
 # MAPPING: DocumentoBOM -> dati testata + righe (ex ExcelHelper)
 # ======================================================================
 
+def _build_bom_name(code: str, title: str, revision: str, pn: str) -> str:
+    """Costruisce il nome da salvare su Odoo: Codice + Descrizione + Revisione."""
+    code = (code or pn or "BOM").strip()
+    title = (title or "").strip()
+    revision = (revision or "").strip()
+
+    parts = [code]
+    if title:
+        parts.append(title)
+    if revision:
+        parts.append(revision)
+
+    return " - ".join(parts)
+
+
+def _ensure_revision_name(header: Dict) -> Dict:
+    """Popola i campi nome usando sempre il builder con revisione."""
+    safe_header = dict(header)
+
+    code = safe_header.get("x_studio_x_code") or safe_header.get(config.FIELD_BOM_PN) or ""
+    title = safe_header.get(config.FIELD_BOM_TITLE, "")
+    revision = safe_header.get(config.FIELD_BOM_REVISION, "")
+    pn = safe_header.get(config.FIELD_BOM_PN, "")
+
+    base_name = _build_bom_name(code, title, revision, pn)
+    safe_header[config.FIELD_BOM_NAME] = base_name
+    safe_header[config.FIELD_BOM_X_NAME] = base_name
+
+    return safe_header
+
+
+
 def documento_to_header_data(doc: DocumentoBOM) -> Dict:
-    """
-    Converte un DocumentoBOM nei campi della testata x_boms.
-    Usa:
-      - doc.pn come P/N
-      - doc.title come Titolo
-      - un "name" base = "PN - Title"
-    """
+    """Converte un DocumentoBOM nei campi della testata x_boms."""
     pn = doc.pn or ""
     title = doc.title or ""
-    base_name = f"{pn} - {title}" if title else pn or (doc.code or "BOM")
-
+    code = doc.code or pn or "BOM"
+    base_name = _build_bom_name(code, title, doc.revision or "", pn)
     # Serializzo autori e revisioni in testo (solo se presenti)
     authors_lines: List[str] = []
     for a in doc.authors or []:
@@ -63,12 +89,12 @@ def documento_to_header_data(doc: DocumentoBOM) -> Dict:
     pl_revisions_text = "\n".join(rev_lines)
 
     header_data: Dict = {
-        "x_name": base_name,
-        "x_studio_x_name": base_name,
-        "x_studio_x_pn": pn,            # P/N
-        "x_studio_x_titolo": title,     # Titolo
-
-        "x_studio_x_revision": doc.revision or "",
+        # Nome completo sempre con revisione
+        config.FIELD_BOM_NAME: base_name,
+        config.FIELD_BOM_X_NAME: base_name,
+        config.FIELD_BOM_PN: pn,  # P/N
+        config.FIELD_BOM_TITLE: title,  # Titolo
+        config.FIELD_BOM_REVISION: doc.revision or "",
         "x_studio_x_data": doc.doc_date.isoformat() if doc.doc_date else False,
         "x_studio_x_type": doc.bom_type or "",
         "x_studio_x_only_released": doc.only_released or "",
@@ -166,19 +192,7 @@ def create_bom(client, header_data: dict, line_data_list: List[dict]) -> Tuple[i
     come il tuo OdooClient in view.gui.
     """
     # copia locale
-    safe_header = dict(header_data)
-
-    # assicurati che x_name sia sempre valorizzato (campo obbligatorio di x_boms)
-    if not safe_header.get("x_name"):
-        base_name = safe_header.get("x_studio_x_name")
-        if not base_name:
-            pn = safe_header.get("x_studio_x_pn", "")
-            # titolo: prova sia x_studio_x_titolo che x_studio_x_title
-            title = safe_header.get("x_studio_x_titolo", "") or safe_header.get("x_studio_x_title", "")
-        revision = safe_header.get("x_studio_x_revision", "")
-        parts = [p for p in [pn, title, revision] if p]
-        base_name = " - ".join(parts) or "BOM senza nome"
-        safe_header["x_name"] = base_name
+    safe_header = _ensure_revision_name(header_data)
 
     print("Header che mando a Odoo:", safe_header)
 
@@ -213,18 +227,8 @@ def overwrite_bom(client, bom_id: int, header_data: dict, line_data_list: List[d
       - unlink(model, ids)
       - search(model, domain)
     """
-    safe_header = dict(header_data)
 
-    # come in create_bom: garantisci x_name valorizzato
-    if not safe_header.get("x_name"):
-        base_name = safe_header.get("x_studio_x_name")
-        if not base_name:
-            pn = safe_header.get("x_studio_x_pn", "")
-            title = safe_header.get("x_studio_x_titolo", "") or safe_header.get("x_studio_x_title", "")
-            revision = safe_header.get("x_studio_x_revision", "")
-            parts = [p for p in [pn, title, revision] if p]
-            base_name = " - ".join(parts) or "BOM senza nome"
-        safe_header["x_name"] = base_name
+    safe_header = _ensure_revision_name(header_data)
 
     log(f"  ✏️ Aggiorno testata BOM ID {bom_id}")
     client.write(BOM_HEADER_MODEL, [bom_id], safe_header)
@@ -281,26 +285,54 @@ def import_or_skip_bom(client, doc: DocumentoBOM, log=print) -> Tuple[int | None
     header_data = documento_to_header_data(doc)
     line_data_list = documento_to_line_data_list(doc)
 
-    pn = header_data.get("x_studio_x_pn") or doc.pn
+    pn = header_data.get(config.FIELD_BOM_PN) or doc.pn
     if not pn:
         log("  ⚠ Nessun P/N trovato, salto import di questa BOM.")
         return None, []
+    revision = (doc.revision or "").strip()
+
     revision = (doc.revision or "").strip()
 
     # Cerca BOM già presente per questo P/N e Revisione
     existing_ids = client.search(
         BOM_HEADER_MODEL,
         [
-            ("x_studio_x_pn", "=", pn),
-            ("x_studio_x_revision", "=", revision),
+            (config.FIELD_BOM_PN, "=", pn),
+            (config.FIELD_BOM_REVISION, "=", revision),
         ],
     )
     if existing_ids:
+        existing_id = existing_ids[0]
         log(
             f"  🔁 BOM per P/N {pn} e Revisione {revision} esiste già "
-            f"(ID={existing_ids[0]}), non faccio nulla."
+            f"(ID={existing_id})."
         )
-        return existing_ids[0], []
+
+        # Se il nome salvato non contiene la revisione aggiorna x_name/x_studio_x_name
+        current = client.search_read(
+            BOM_HEADER_MODEL,
+            [("id", "=", existing_id)],
+            fields=[config.FIELD_BOM_NAME, config.FIELD_BOM_X_NAME],
+            limit=1,
+        )
+        if current:
+            current_name = (current[0].get(config.FIELD_BOM_NAME) or "").strip()
+            current_x_name = (current[0].get(config.FIELD_BOM_X_NAME) or "").strip()
+            desired = header_data.get(config.FIELD_BOM_NAME) or header_data.get(config.FIELD_BOM_X_NAME) or ""
+            desired = desired.strip()
+
+            if desired and (current_name != desired or current_x_name != desired):
+                log("  ✏️ Aggiorno il nome della BOM esistente con la revisione.")
+                client.write(
+                    BOM_HEADER_MODEL,
+                    [existing_id],
+                    {
+                        config.FIELD_BOM_NAME: desired,
+                        config.FIELD_BOM_X_NAME: desired,
+                    },
+                )
+
+        return existing_id, []
 
     # Nessuna BOM esistente: crea nuova
     log(f"  🆕 Creo nuova BOM per P/N {pn}")
@@ -324,10 +356,12 @@ def import_with_overwrite(client, doc: DocumentoBOM, log=print) -> Tuple[str, in
     header_data = documento_to_header_data(doc)
     line_data_list = documento_to_line_data_list(doc)
 
-    pn = header_data.get("x_studio_x_pn") or doc.pn
+    pn = header_data.get(config.FIELD_BOM_PN) or doc.pn
     if not pn:
         log("  ⚠ Nessun P/N trovato, salto import di questa BOM (manca P/N).")
         return "error", None, []
+
+    revision = (doc.revision or "").strip()
 
     revision = (doc.revision or "").strip()
 
@@ -335,8 +369,8 @@ def import_with_overwrite(client, doc: DocumentoBOM, log=print) -> Tuple[str, in
     existing_ids = client.search(
         BOM_HEADER_MODEL,
         [
-            ("x_studio_x_pn", "=", pn),
-            ("x_studio_x_revision", "=", revision),
+            (config.FIELD_BOM_PN, "=", pn),
+            (config.FIELD_BOM_REVISION, "=", revision),
         ],
     )
     if not existing_ids:
