@@ -19,7 +19,7 @@ class Bom:
     title: str
     x_name: str
     name: str
-
+    revision: str
 
 # ======================================================================
 # RIGA BOM (x_bom_line)

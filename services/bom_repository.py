@@ -20,7 +20,7 @@ class BomRepository:
         self.lines: List[BomLine] = []
 
         self.boms_by_id: Dict[int, Bom] = {}
-        self.boms_by_pn: Dict[str, Bom] = {}
+        self.boms_by_code_rev: Dict[tuple[str, str], Bom] = {}
         self.lines_by_bom_id: Dict[int, List[BomLine]] = {}
 
         self.root_boms: List[Bom] = []
@@ -46,6 +46,7 @@ class BomRepository:
             config.FIELD_BOM_TITLE,
             config.FIELD_BOM_X_NAME,
             config.FIELD_BOM_NAME,
+            config.FIELD_BOM_REVISION,
         ]
         records = self.client.search_read(config.MODEL_BOM, [], fields=fields)
 
@@ -56,6 +57,7 @@ class BomRepository:
                 title=rec.get(config.FIELD_BOM_TITLE, "") or "",
                 x_name=rec.get(config.FIELD_BOM_X_NAME, "") or "",
                 name=rec.get(config.FIELD_BOM_NAME, "") or "",
+                revision=rec.get(config.FIELD_BOM_REVISION, "") or "",
             )
             for rec in records
         ]
@@ -166,7 +168,10 @@ class BomRepository:
 
     def _index_data(self) -> None:
         self.boms_by_id = {b.id: b for b in self.boms}
-        self.boms_by_pn = {b.pn: b for b in self.boms if b.pn}
+        self.boms_by_code_rev = {}
+        for b in self.boms:
+            key = (b.pn.strip(), b.revision.strip())
+            self.boms_by_code_rev[key] = b
 
         mapping: Dict[int, List[BomLine]] = {}
         for line in self.lines:
@@ -191,5 +196,22 @@ class BomRepository:
     def get_lines_for_bom(self, bom_id: int) -> List[BomLine]:
         return self.lines_by_bom_id.get(bom_id, [])
 
-    def get_bom_by_pn(self, pn: str) -> Bom | None:
-        return self.boms_by_pn.get(pn)
+    def get_bom_by_code(self, code: str, revision: str | None = None) -> Bom | None:
+        code = code.strip()
+        rev_key = revision.strip() if revision else ""
+
+        if not code:
+            return None
+
+        bom = self.boms_by_code_rev.get((code, rev_key))
+        if bom:
+            return bom
+
+        # fallback: se non specificata la revisione, ritorna la prima BOM con lo stesso codice
+        for b in self.boms:
+            if b.pn.strip() == code:
+                return b
+        return None
+
+    def get_bom_by_id(self, bom_id: int) -> Bom | None:
+        return self.boms_by_id.get(bom_id)

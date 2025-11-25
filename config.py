@@ -27,6 +27,7 @@ FIELD_BOM_PN = "x_studio_x_pn"
 FIELD_BOM_TITLE = "x_studio_x_titolo"
 FIELD_BOM_X_NAME = "x_studio_x_name"
 FIELD_BOM_NAME = "x_name"
+FIELD_BOM_REVISION = "x_studio_x_revision"
 
 # BOM Line (x_bom_line)
 FIELD_LINE_BOM = "x_studio_x_boms_id"          # many2one verso x_boms

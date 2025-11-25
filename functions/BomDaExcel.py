@@ -175,7 +175,9 @@ def create_bom(client, header_data: dict, line_data_list: List[dict]) -> Tuple[i
             pn = safe_header.get("x_studio_x_pn", "")
             # titolo: prova sia x_studio_x_titolo che x_studio_x_title
             title = safe_header.get("x_studio_x_titolo", "") or safe_header.get("x_studio_x_title", "")
-            base_name = f"{pn} - {title}" if title else pn or "BOM senza nome"
+        revision = safe_header.get("x_studio_x_revision", "")
+        parts = [p for p in [pn, title, revision] if p]
+        base_name = " - ".join(parts) or "BOM senza nome"
         safe_header["x_name"] = base_name
 
     print("Header che mando a Odoo:", safe_header)
@@ -219,7 +221,9 @@ def overwrite_bom(client, bom_id: int, header_data: dict, line_data_list: List[d
         if not base_name:
             pn = safe_header.get("x_studio_x_pn", "")
             title = safe_header.get("x_studio_x_titolo", "") or safe_header.get("x_studio_x_title", "")
-            base_name = f"{pn} - {title}" if title else pn or "BOM senza nome"
+            revision = safe_header.get("x_studio_x_revision", "")
+            parts = [p for p in [pn, title, revision] if p]
+            base_name = " - ".join(parts) or "BOM senza nome"
         safe_header["x_name"] = base_name
 
     log(f"  ✏️ Aggiorno testata BOM ID {bom_id}")
@@ -281,11 +285,21 @@ def import_or_skip_bom(client, doc: DocumentoBOM, log=print) -> Tuple[int | None
     if not pn:
         log("  ⚠ Nessun P/N trovato, salto import di questa BOM.")
         return None, []
+    revision = (doc.revision or "").strip()
 
-    # Cerca BOM già presente per questo P/N
-    existing_ids = client.search(BOM_HEADER_MODEL, [("x_studio_x_pn", "=", pn)])
+    # Cerca BOM già presente per questo P/N e Revisione
+    existing_ids = client.search(
+        BOM_HEADER_MODEL,
+        [
+            ("x_studio_x_pn", "=", pn),
+            ("x_studio_x_revision", "=", revision),
+        ],
+    )
     if existing_ids:
-        log(f"  🔁 BOM per P/N {pn} esiste già (ID={existing_ids[0]}), non faccio nulla.")
+        log(
+            f"  🔁 BOM per P/N {pn} e Revisione {revision} esiste già "
+            f"(ID={existing_ids[0]}), non faccio nulla."
+        )
         return existing_ids[0], []
 
     # Nessuna BOM esistente: crea nuova
@@ -315,25 +329,36 @@ def import_with_overwrite(client, doc: DocumentoBOM, log=print) -> Tuple[str, in
         log("  ⚠ Nessun P/N trovato, salto import di questa BOM (manca P/N).")
         return "error", None, []
 
-    # Cerca BOM esistenti per questo P/N
-    existing_ids = client.search(BOM_HEADER_MODEL, [("x_studio_x_pn", "=", pn)])
+    revision = (doc.revision or "").strip()
 
+    # Cerca BOM esistente per stesso P/N e Revisione
+    existing_ids = client.search(
+        BOM_HEADER_MODEL,
+        [
+            ("x_studio_x_pn", "=", pn),
+            ("x_studio_x_revision", "=", revision),
+        ],
+    )
     if not existing_ids:
         # Nessuna BOM esistente: stesso comportamento di import_or_skip_bom
-        log(f"  🆕 Nessuna BOM trovata per P/N {pn}, creo nuova BOM.")
+        log(
+            f"  🆕 Nessuna BOM trovata per P/N {pn} con Revisione {revision or 'N/A'}, creo nuova BOM."
+        )
         bom_id, line_ids = create_bom(client, header_data, line_data_list)
         return "imported", bom_id, line_ids
 
     if len(existing_ids) > 1:
-        # Norma di sicurezza: se ci sono più BOM con stesso P/N, non faccio nulla
+        # Norma di sicurezza: se ci sono più BOM con stesso P/N e Revisione, non faccio nulla
         log(
-            f"  ❌ [ERRORE] Trovate {len(existing_ids)} BOM per P/N {pn} "
+            f"  ❌ [ERRORE] Trovate {len(existing_ids)} BOM per P/N {pn} e Revisione {revision} "
             f"(IDs={existing_ids}). Sovrascrittura bloccata, controlla i dati in Odoo."
         )
         return "error", None, []
 
     existing_id = existing_ids[0]
-    log(f"  ♻️ Sovrascrivo BOM esistente per P/N {pn} (ID={existing_id}).")
+    log(
+        f"  ♻️ Sovrascrivo BOM esistente per P/N {pn} e Revisione {revision} (ID={existing_id})."
+    )
     bom_id, line_ids = overwrite_bom(client, existing_id, header_data, line_data_list, log=log)
     return "overwritten", bom_id, line_ids
 

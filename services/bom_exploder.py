@@ -7,21 +7,21 @@ class BomExploder:
         self,
         root_bom: Bom,
         get_lines_for_bom: Callable[[int], List[BomLine]],
-        get_bom_by_pn: Callable[[str], Bom | None],
+        get_bom_by_code: Callable[[str, str | None], Bom | None],
     ) -> tuple[Dict[str, Any], Dict[str, TotalEntry]]:
         totals: Dict[str, TotalEntry] = {}
-        visited_pns: Set[str] = set()
+        visited_boms: Set[tuple[str, str]] = set()
 
-        root_key = root_bom.pn.strip() or str(root_bom.id)
-        visited_pns.add(root_key)
+        root_key = (root_bom.pn.strip() or str(root_bom.id), root_bom.revision or "")
+        visited_boms.add(root_key)
 
         tree = self._explode_recursive(
             bom=root_bom,
             qty_multiplier=1.0,
             get_lines_for_bom=get_lines_for_bom,
-            get_bom_by_pn=get_bom_by_pn,
+            get_bom_by_code=get_bom_by_code,
             totals=totals,
-            visited_pns=visited_pns,
+            visited_boms=visited_boms,
         )
         return tree, totals
 
@@ -30,9 +30,9 @@ class BomExploder:
         bom: Bom,
         qty_multiplier: float,
         get_lines_for_bom: Callable[[int], List[BomLine]],
-        get_bom_by_pn: Callable[[str], Bom | None],
+        get_bom_by_code: Callable[[str, str | None], Bom | None],
         totals: Dict[str, TotalEntry],
-        visited_pns: Set[str],
+        visited_boms: Set[tuple[str, str]],
     ) -> Dict[str, Any]:
 
         node: Dict[str, Any] = {
@@ -90,23 +90,23 @@ class BomExploder:
             }
 
             # --- SOTTO-BOM? ---
-            sub_bom = get_bom_by_pn(code) if code else None
+            sub_bom = get_bom_by_code(code, line.rev) if code else None
             if sub_bom:
-                sub_key = sub_bom.pn.strip() or str(sub_bom.id)
-                if sub_key in visited_pns:
+                sub_key = (sub_bom.pn.strip() or str(sub_bom.id), sub_bom.revision or "")
+                if sub_key in visited_boms:
                     # ciclo → evito ricorsione infinita, ma segnalo
                     child_node["description"] += " (RICORSIONE BLOCCATA)"
                 else:
-                    new_visited = set(visited_pns)
+                    new_visited = set(visited_boms)
                     new_visited.add(sub_key)
 
                     sub_tree = self._explode_recursive(
                         bom=sub_bom,
                         qty_multiplier=total_qty,
                         get_lines_for_bom=get_lines_for_bom,
-                        get_bom_by_pn=get_bom_by_pn,
+                        get_bom_by_code=get_bom_by_code,
                         totals=totals,
-                        visited_pns=new_visited,
+                        visited_boms=new_visited,
                     )
 
                     # innesto i dati di linea nel nodo radice della sotto-BOM

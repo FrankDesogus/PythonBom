@@ -121,8 +121,8 @@ class MainWindow(QMainWindow):
 
         # Tabella BOM radice
         self.table_boms = QTableWidget()
-        self.table_boms.setColumnCount(2)
-        self.table_boms.setHorizontalHeaderLabels(["P/N", "Titolo"])
+        self.table_boms.setColumnCount(3)
+        self.table_boms.setHorizontalHeaderLabels(["P/N", "Titolo", "REV."])
         self.table_boms.horizontalHeader().setStretchLastSection(True)
         self.table_boms.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table_boms.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -209,9 +209,11 @@ class MainWindow(QMainWindow):
         self.table_boms.setRowCount(len(boms))
 
         for row, bom in enumerate(boms):
-            self.table_boms.setItem(row, 0, QTableWidgetItem(bom.pn))
+            pn_item = QTableWidgetItem(bom.pn)
+            pn_item.setData(Qt.UserRole, bom.id)
+            self.table_boms.setItem(row, 0, pn_item)
             self.table_boms.setItem(row, 1, QTableWidgetItem(bom.title))
-
+            self.table_boms.setItem(row, 2, QTableWidgetItem(bom.revision))
     # ----------------------------------------------------------------------
     # FILTRO RICERCA
     # ----------------------------------------------------------------------
@@ -227,6 +229,7 @@ class MainWindow(QMainWindow):
                 b for b in all_boms
                 if text in (b.pn or "").lower()
                 or text in (b.title or "").lower()
+                or text in (b.revision or "").lower()
             ]
 
         self._populate_bom_table(filtered)
@@ -259,12 +262,11 @@ class MainWindow(QMainWindow):
         if pn_item is None:
             return None
 
-        pn = pn_item.text().strip()
-        if not pn:
+        bom_id = pn_item.data(Qt.UserRole)
+        if bom_id is None:
             return None
 
-        return self.repository.get_bom_by_pn(pn)
-
+        return self.repository.get_bom_by_id(int(bom_id))
 
     # ----------------------------------------------------------------------
     # ESPLOSIONE BOM
@@ -282,7 +284,7 @@ class MainWindow(QMainWindow):
             tree_dict, totals = self.exploder.explode_bom(
                 root_bom=bom,
                 get_lines_for_bom=self.repository.get_lines_for_bom,
-                get_bom_by_pn=self.repository.get_bom_by_pn,
+                get_bom_by_code=self.repository.get_bom_by_code,
             )
         except Exception as e:
             QMessageBox.critical(self, "Errore", f"Errore durante esplosione:\n{e}")
