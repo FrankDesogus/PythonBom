@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import re
-from typing import List, Optional
+from typing import List, Optional ,Tuple
 from pathlib import Path
 
 import pdfplumber
@@ -32,6 +32,42 @@ def _parse_qty_str(val: str) -> Optional[float]:
         return float(txt)
     except ValueError:
         return None
+
+def _split_manufacturer_cells(den_comm: str, rag_soc: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Normalizza i valori Den.Comm / Rag.Soc estratti dal PDF.
+
+    In alcuni PDF le due colonne vengono fuse in una sola cella: il Trade Number
+    (Den.Comm) e la Rag.Soc compaiono nella stessa stringa separati da newline
+    o da spazi multipli. Se Rag.Soc è vuoto ma Den.Comm contiene testo con almeno
+    2 blocchi separati da newline o da almeno due spazi consecutivi, tenta di
+    splittare l'ultima parte come manufacturer e tenere il resto come
+    manufacturer_code.
+    """
+
+    clean_den = (den_comm or "").strip()
+    clean_rag = (rag_soc or "").strip()
+
+    # Se Rag.Soc è già valorizzato, usa direttamente quei due campi.
+    if clean_rag:
+        return clean_den or None, clean_rag
+
+    if not clean_den:
+        return None, None
+
+    # Separatore: newline esplicito o due+ spazi consecutivi (pdfplumber spesso
+    # sostituisce il cambio di colonna con spazi).
+    split_candidates = re.split(r"[\n\r]+|\s{2,}", clean_den)
+    parts = [p.strip() for p in split_candidates if p and p.strip()]
+
+    if len(parts) >= 2:
+        # ultima parte = manufacturer, resto = manufacturer_code
+        manufacturer = parts[-1]
+        code = " ".join(parts[:-1])
+        return code or None, manufacturer or None
+
+    # fallback: tutto Den.Comm, niente Rag.Soc
+    return clean_den, None
 
 
 def carica_bom_da_pdf(path: str) -> DocumentoBOM:
@@ -155,8 +191,9 @@ def carica_bom_da_pdf(path: str) -> DocumentoBOM:
                         note = (row[10] or "").strip()
                         ce = (row[11] or "").strip()
                         mp = (row[12] or "").strip()
-                        den_comm = (row[13] or "").strip()
-                        rag_soc = (row[14] or "").strip()
+                        den_comm_raw = row[13] or ""
+                        rag_soc_raw = row[14] or ""
+                        den_comm, rag_soc = _split_manufacturer_cells(den_comm_raw, rag_soc_raw)
 
                         current_item = RigaBOM(
                             pos=c0,
@@ -170,8 +207,8 @@ def carica_bom_da_pdf(path: str) -> DocumentoBOM:
                             ref_designator=rif_schema or None,
                             tecn=None,
                             notes=note or None,
-                            manufacturer=rag_soc or None,          # Rag.Soc / Comp.Name
-                            manufacturer_code=den_comm or None,    # Den.Comm / Trade Number
+                            manufacturer=rag_soc or None,  # Rag.Soc / Comp.Name (o fallback da Den.Comm)
+                            manufacturer_code=den_comm or None,  # Den.Comm / Trade Number (normalizzato)
                             tipo=tipo or None,
                             rev=rev_item or None,
                             rif_dis=rif_dis or None,
@@ -186,16 +223,29 @@ def carica_bom_da_pdf(path: str) -> DocumentoBOM:
                         if not current_item:
                             continue
 
-                        extra_den = (row[13] or "").strip()
+                        extra_den_raw = row[13] or ""
+                        extra_rag_raw = row[14] or ""
+                        extra_den, extra_rag = _split_manufacturer_cells(
+                            extra_den_raw,
+                            extra_rag_raw,
+                        )
+
                         if extra_den:
                             current_item.manufacturer_code = (
-                                ((current_item.manufacturer_code or "") + " " + extra_den).strip()
+                                " ".join(
+                                    part.strip()
+                                    for part in [current_item.manufacturer_code or "", extra_den]
+                                    if part and part.strip()
+                                )
                             )
 
-                        extra_rag = (row[14] or "").strip()
                         if extra_rag:
                             current_item.manufacturer = (
-                                ((current_item.manufacturer or "") + " " + extra_rag).strip()
+                                " ".join(
+                                    part.strip()
+                                    for part in [current_item.manufacturer or "", extra_rag]
+                                    if part and part.strip()
+                                )
                             )
 
     # Nessun autore/RAM nel PDF → liste vuote / None
