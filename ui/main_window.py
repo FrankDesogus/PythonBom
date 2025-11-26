@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):
         self.log_box = QPlainTextEdit()
         self.log_box.setReadOnly(True)
         self.table_totals.setEditTriggers(QAbstractItemView.NoEditTriggers)
-
+        self.table_totals.itemDoubleClicked.connect(self._on_total_row_double_clicked)
         main_layout.addWidget(self.log_box, 1)
 
     # ----------------------------------------------------------------------
@@ -346,7 +346,9 @@ class MainWindow(QMainWindow):
         self.table_totals.setRowCount(len(totals))
 
         for row, (_, entry) in enumerate(totals.items()):
-            self.table_totals.setItem(row, 0, QTableWidgetItem(entry.internal_code))
+            code_item = QTableWidgetItem(entry.internal_code)
+            code_item.setData(Qt.UserRole, entry.internal_code)
+            self.table_totals.setItem(row, 0, code_item)
             self.table_totals.setItem(row, 1, QTableWidgetItem(entry.description))
             self.table_totals.setItem(row, 2, QTableWidgetItem(str(entry.qty)))
             self.table_totals.setItem(row, 3, QTableWidgetItem(entry.unit))
@@ -358,6 +360,37 @@ class MainWindow(QMainWindow):
             self.table_totals.setItem(row, 9, QTableWidgetItem(entry.ce))
             self.table_totals.setItem(row, 10, QTableWidgetItem(entry.mp))
             self.table_totals.setItem(row, 11, QTableWidgetItem(entry.notes))
+
+    def _on_total_row_double_clicked(self, item: QTableWidgetItem):
+        row = item.row()
+        code_item = self.table_totals.item(row, 0)
+        if code_item is None:
+            return
+
+        code = code_item.data(Qt.UserRole) or code_item.text()
+        entry = self.current_totals.get(code)
+        if entry is None:
+            QMessageBox.warning(self, "Attenzione", "Impossibile trovare il dettaglio per questo codice.")
+            return
+
+        if not entry.sources:
+            QMessageBox.information(self, "Dettaglio totalizzazione", "Nessun dettaglio disponibile per questo codice.")
+            return
+
+        breakdown_lines = [
+            f"• {qty:g} da {source}" for source, qty in sorted(
+                entry.sources.items(), key=lambda kv: kv[1], reverse=True
+            )
+        ]
+        message = (
+            f"Codice: {entry.internal_code}\n"
+            f"Totale: {entry.qty:g} {entry.unit}\n\n"
+            "Dettaglio per padre:\n"
+            + "\n".join(breakdown_lines)
+        )
+
+        QMessageBox.information(self, "Dettaglio totalizzazione", message)
+
 
     # ----------------------------------------------------------------------
     # IMPORT

@@ -4,7 +4,7 @@ Dataclass di dominio utilizzate da tutta l'applicazione.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any
 
 
@@ -82,6 +82,12 @@ class TotalEntry:
     ce: str
     mp: str
     notes: str
+    sources: Dict[str, float] = field(default_factory=dict)
 
     def add_quantity(self, q: float) -> None:
         self.qty += q
+
+
+    def add_source(self, parent_label: str, q: float) -> None:
+        """Aggrega la quantità proveniente da un determinato padre."""
+        self.sources[parent_label] = self.sources.get(parent_label, 0) + q

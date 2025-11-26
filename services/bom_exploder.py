@@ -56,6 +56,7 @@ class BomExploder:
         for line in get_lines_for_bom(bom.id):
             code = (line.internal_code or "").strip()
             total_qty = line.qty * qty_multiplier
+            parent_label = f"{bom.pn} ({bom.title})"
 
             # --- TOTALIZZAZIONE: solo se codice NON vuoto e qty != 0
             if code and total_qty != 0:
@@ -75,6 +76,7 @@ class BomExploder:
                         notes=line.notes,
                     )
                 totals[code].add_quantity(total_qty)
+                totals[code].add_source(parent_label, total_qty)
 
             # --- NODO FIGLIO BASE ---
             child_node: Dict[str, Any] = {
