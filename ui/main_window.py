@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
         # Tabella totalizzazione
         # --------------------------------------------------------------
         self.table_totals = QTableWidget()
-        self.table_totals.setColumnCount(6)
+        self.table_totals.setColumnCount(12)
         self.table_totals.setHorizontalHeaderLabels([
             "Codice Interno",
             "Descrizione",
@@ -164,6 +164,12 @@ class MainWindow(QMainWindow):
             "UM",
             "Manufacturer",
             "Codice Produttore",
+            "Tipo",
+            "Rev",
+            "Access Ref",
+            "CE",
+            "MP",
+            "Note",
         ])
         self.table_totals.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.table_totals)
@@ -346,6 +352,12 @@ class MainWindow(QMainWindow):
             self.table_totals.setItem(row, 3, QTableWidgetItem(entry.unit))
             self.table_totals.setItem(row, 4, QTableWidgetItem(entry.manufacturer))
             self.table_totals.setItem(row, 5, QTableWidgetItem(entry.manufacturer_code))
+            self.table_totals.setItem(row, 6, QTableWidgetItem(entry.type))
+            self.table_totals.setItem(row, 7, QTableWidgetItem(entry.rev))
+            self.table_totals.setItem(row, 8, QTableWidgetItem(entry.access_ref))
+            self.table_totals.setItem(row, 9, QTableWidgetItem(entry.ce))
+            self.table_totals.setItem(row, 10, QTableWidgetItem(entry.mp))
+            self.table_totals.setItem(row, 11, QTableWidgetItem(entry.notes))
 
     # ----------------------------------------------------------------------
     # IMPORT

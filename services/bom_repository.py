@@ -97,6 +97,23 @@ class BomRepository:
         )
 
         lines: List[BomLine] = []
+        def _to_str(value: Any) -> str:
+            """
+            Converte un campo proveniente da search_read in stringa.
+
+            Gestisce many2one (lista/tupla), None/False e trimming degli spazi.
+            """
+
+            if value in (None, False):
+                return ""
+            if isinstance(value, (list, tuple)):
+                if len(value) > 1:
+                    return str(value[1]).strip()
+                if value:
+                    return str(value[0]).strip()
+                return ""
+            return str(value).strip()
+
 
         for rec in records:
             # many2one: può essere [id, "name"] o un int o None
@@ -148,8 +165,8 @@ class BomRepository:
                 refdesignator=(rec.get(config.FIELD_LINE_REFDES, "") or ""),
                 tecn=(rec.get(config.FIELD_LINE_TECN, "") or ""),
                 notes=(rec.get(config.FIELD_LINE_NOTES, "") or ""),
-                manufacturer=(rec.get(config.FIELD_LINE_MANUFACTURER, "") or ""),
-                manufacturer_code=(rec.get(config.FIELD_LINE_MANUFACTURER_CODE, "") or ""),
+                manufacturer=_to_str(rec.get(config.FIELD_LINE_MANUFACTURER, "")),
+                manufacturer_code=_to_str(rec.get(config.FIELD_LINE_MANUFACTURER_CODE, "")),
                 type=(rec.get(config.FIELD_LINE_TYPE, "") or ""),
                 rev=(rec.get(config.FIELD_LINE_REV, "") or ""),
                 access_ref=(rec.get(config.FIELD_LINE_ACCESS_REF, "") or ""),

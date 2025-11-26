@@ -67,6 +67,12 @@ class BomExploder:
                         unit=line.unit,
                         manufacturer=line.manufacturer,
                         manufacturer_code=line.manufacturer_code,
+                        type=line.type,
+                        rev=line.rev,
+                        access_ref=line.access_ref,
+                        ce=line.ce,
+                        mp=line.mp,
+                        notes=line.notes,
                     )
                 totals[code].add_quantity(total_qty)
 

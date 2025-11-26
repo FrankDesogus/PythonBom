@@ -76,6 +76,12 @@ class TotalEntry:
     unit: str
     manufacturer: str
     manufacturer_code: str
+    type: str
+    rev: str
+    access_ref: str
+    ce: str
+    mp: str
+    notes: str
 
     def add_quantity(self, q: float) -> None:
         self.qty += q

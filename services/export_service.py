@@ -19,6 +19,12 @@ def export_totals_to_excel(totals: Dict[str, TotalEntry], filepath: str) -> None
         "UM",
         "Manufacturer",
         "Codice Produttore",
+        "Tipo",
+        "Rev",
+        "Access Ref",
+        "CE",
+        "MP",
+        "Note",
     ]
     ws.append(headers)
 
@@ -30,6 +36,12 @@ def export_totals_to_excel(totals: Dict[str, TotalEntry], filepath: str) -> None
             entry.unit,
             entry.manufacturer,
             entry.manufacturer_code,
+            entry.type,
+            entry.rev,
+            entry.access_ref,
+            entry.ce,
+            entry.mp,
+            entry.notes,
         ])
 
     for col in range(1, len(headers) + 1):
